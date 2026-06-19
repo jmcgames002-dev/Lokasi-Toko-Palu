@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lokasi Toko</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', sans-serif; background: #f5f5f5; color: #222; height: 100vh; display: flex; flex-direction: column; }
+
+  header { background: #fff; border-bottom: 1px solid #e0e0e0; padding: 14px 20px; display: flex; align-items: center; gap: 10px; }
+  header h1 { font-size: 1.1rem; font-weight: 600; }
+  header span { font-size: 1.3rem; }
+
+  .main { display: flex; flex: 1; overflow: hidden; }
+  #map { flex: 1; z-index: 1; }
+
+  .sidebar { width: 330px; background: #fff; border-left: 1px solid #e0e0e0; display: flex; flex-direction: column; overflow: hidden; }
+
+  .form-box { padding: 16px; border-bottom: 1px solid #f0f0f0; overflow-y: auto; }
+  .form-box h2 { font-size: 0.85rem; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 12px; }
+
+  .field { margin-bottom: 9px; }
+  .field label { display: block; font-size: 0.75rem; font-weight: 600; color: #888; margin-bottom: 4px; text-transform: uppercase; letter-spacing: .4px; }
+  input[type=text] { width: 100%; border: 1px solid #e0e0e0; border-radius: 8px; padding: 9px 12px; font-size: 0.875rem; font-family: inherit; outline: none; transition: border .2s; background: #fafafa; }
+  input[type=text]:focus { border-color: #555; background: #fff; }
+
+  .coord-box { background: #f7f7f7; border: 1px solid #e8e8e8; border-radius: 8px; padding: 10px 12px; font-size: 0.82rem; color: #555; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+  .coord-box .coord-val { font-weight: 500; color: #222; word-break: break-all; }
+  .coord-box .hint-text { color: #bbb; font-style: italic; }
+  .coord-box button { flex-shrink: 0; background: none; border: none; cursor: pointer; color: #888; font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; transition: background .2s; }
+  .coord-box button:hover { background: #ebebeb; color: #333; }
+
+  .btn-save { width: 100%; margin-top: 12px; background: #222; color: #fff; border: none; border-radius: 8px; padding: 10px; font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: background .2s; display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .btn-save:hover:not(:disabled) { background: #444; }
+  .btn-save:disabled { background: #ccc; cursor: not-allowed; }
+
+  .list-box { flex: 1; overflow-y: auto; padding: 12px 16px; }
+  .list-box h2 { font-size: 0.85rem; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 10px; }
+  .empty { text-align: center; color: #bbb; font-size: 0.85rem; margin-top: 30px; }
+
+  .store-card { background: #fafafa; border: 1px solid #ebebeb; border-radius: 10px; padding: 12px; margin-bottom: 10px; cursor: pointer; transition: border .2s, box-shadow .2s; }
+  .store-card:hover { border-color: #bbb; box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+  .store-card.active { border-color: #222; box-shadow: 0 2px 10px rgba(0,0,0,.1); }
+  .card-top { display: flex; justify-content: space-between; align-items: flex-start; }
+  .card-name { font-weight: 600; font-size: 0.9rem; }
+  .card-sub { font-size: 0.78rem; color: #777; margin-top: 2px; }
+  .card-actions { display: flex; gap: 4px; }
+  .card-actions button { background: none; border: none; cursor: pointer; padding: 3px 6px; border-radius: 5px; font-size: 0.75rem; color: #aaa; transition: background .2s, color .2s; }
+  .card-actions button:hover { background: #f0f0f0; color: #333; }
+  .card-actions .del:hover { color: #e05; background: #fff0f3; }
+  .card-coord { font-size: 0.75rem; color: #888; margin-top: 5px; }
+
+  /* Locate me button */
+  .leaflet-locate-btn { background: white; border: 2px solid rgba(0,0,0,0.2); border-radius: 4px; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1.1rem; box-shadow: 0 1px 5px rgba(0,0,0,.2); transition: background .2s; }
+  .leaflet-locate-btn:hover { background: #f4f4f4; }
+
+  .saving-spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #222; color: #fff; padding: 8px 18px; border-radius: 20px; font-size: 0.82rem; opacity: 0; pointer-events: none; transition: opacity .3s; z-index: 9999; white-space: nowrap; }
+  .toast.show { opacity: 1; }
+
+  @media(max-width: 640px) {
+    .main { flex-direction: column; }
+    #map { height: 45vh; flex: none; }
+    .sidebar { width: 100%; border-left: none; border-top: 1px solid #e0e0e0; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <span>📍</span>
+  <h1>Lokasi Toko — Tim Saya</h1>
+</header>
+
+<div class="main">
+  <div id="map"></div>
+  <div class="sidebar">
+    <div class="form-box">
+      <h2>Tambah Lokasi</h2>
+
+      <div class="field">
+        <label>Kode Toko</label>
+        <input type="text" id="inp-kode" placeholder="Contoh: TK-001" maxlength="30"/>
+      </div>
+
+      <div class="field">
+        <label>Nama Toko</label>
+        <input type="text" id="inp-name" placeholder="Nama toko" maxlength="60"/>
+      </div>
+
+      <div class="field">
+        <label>Nama Sales</label>
+        <input type="text" id="inp-sales" placeholder="Nama sales" maxlength="60"/>
+      </div>
+
+      <div class="field">
+        <label>Titik Lokasi GPS</label>
+        <div class="coord-box">
+          <span id="coord-val" class="hint-text">Klik pada peta untuk memilih titik</span>
+          <button id="copy-btn" onclick="copyCoord()" style="display:none">Salin</button>
+        </div>
+      </div>
+
+      <button class="btn-save" id="btn-save" onclick="saveStore()" disabled>
+        <span id="save-label">Simpan Lokasi</span>
+      </button>
+    </div>
+
+    <div class="list-box">
+      <h2>Tersimpan (<span id="count">0</span>)</h2>
+      <div id="store-list"><p class="empty">Belum ada lokasi tersimpan.</p></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwxrlF5rfmR6VOaPOqpkRLo2h2j74IAAmCWP1a61AQRKRWPQdIr55poPGUS5LF0fJhong/exec';
+
+const stores = [];
+let selected = null;
+let tempMarker = null;
+let activeId = null;
+let isSaving = false;
+
+// Map init — centered on Makassar
+const map = L.map('map').setView([-5.1477, 119.4327], 13);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap contributors', maxZoom: 19
+}).addTo(map);
+
+// Locate Me button
+const LocateControl = L.Control.extend({
+  options: { position: 'topleft' },
+  onAdd() {
+    const btn = L.DomUtil.create('button', 'leaflet-locate-btn');
+    btn.title = 'Lokasi saya';
+    btn.innerHTML = '🎯';
+    L.DomEvent.on(btn, 'click', L.DomEvent.stopPropagation);
+    L.DomEvent.on(btn, 'click', () => {
+      btn.innerHTML = '⏳';
+      map.locate({ setView: true, maxZoom: 17 });
+      map.once('locationfound', e => {
+        btn.innerHTML = '🎯';
+        L.circleMarker(e.latlng, { radius: 8, color: '#1a73e8', fillColor: '#4aa3f3', fillOpacity: 0.8, weight: 2 })
+          .addTo(map).bindPopup('Posisi kamu sekarang').openPopup();
+      });
+      map.once('locationerror', () => {
+        btn.innerHTML = '🎯';
+        showToast('❌ Tidak bisa akses lokasi. Izinkan lokasi di browser.');
+      });
+    });
+    return btn;
+  }
+});
+new LocateControl().addTo(map);
+
+const pinIcon = (color = '#222') => L.divIcon({
+  html: `<svg width="28" height="36" viewBox="0 0 28 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M14 0C6.268 0 0 6.268 0 14c0 9.333 14 22 14 22S28 23.333 28 14C28 6.268 21.732 0 14 0z" fill="${color}"/>
+    <circle cx="14" cy="14" r="5" fill="white"/>
+  </svg>`,
+  className: '', iconSize: [28, 36], iconAnchor: [14, 36], popupAnchor: [0, -36]
+});
+
+map.on('click', e => {
+  selected = { lat: e.latlng.lat.toFixed(6), lng: e.latlng.lng.toFixed(6) };
+  if (tempMarker) map.removeLayer(tempMarker);
+  tempMarker = L.marker([selected.lat, selected.lng], { icon: pinIcon('#e05') }).addTo(map);
+  document.getElementById('coord-val').textContent = `${selected.lat}, ${selected.lng}`;
+  document.getElementById('coord-val').classList.remove('hint-text');
+  document.getElementById('copy-btn').style.display = 'inline';
+  document.getElementById('btn-save').disabled = false;
+});
+
+async function saveStore() {
+  if (isSaving) return;
+  const kode = document.getElementById('inp-kode').value.trim();
+  const name = document.getElementById('inp-name').value.trim();
+  const sales = document.getElementById('inp-sales').value.trim();
+  if (!name) { showToast('⚠️ Nama toko wajib diisi!'); return; }
+  if (!selected) { showToast('⚠️ Pilih titik lokasi di peta dulu!'); return; }
+
+  isSaving = true;
+  const btn = document.getElementById('btn-save');
+  btn.disabled = true;
+  document.getElementById('save-label').innerHTML = '<span class="saving-spinner"></span> Menyimpan...';
+
+  const now = new Date();
+  const timestamp = now.toLocaleString('id-ID', { timeZone: 'Asia/Makassar', year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit' });
+  const gps = `${selected.lat}, ${selected.lng}`;
+  const maps = `https://maps.google.com/?q=${selected.lat},${selected.lng}`;
+
+  const payload = {
+    timestamp,
+    kode_toko: kode,
+    nama_toko: name,
+    nama_sales: sales,
+    titik_lokasi_gps: gps,
+    lokasi_maps: maps
+  };
+
+  try {
+    const params = new URLSearchParams();
+    params.append('timestamp', payload.timestamp);
+    params.append('kode_toko', payload.kode_toko);
+    params.append('nama_toko', payload.nama_toko);
+    params.append('nama_sales', payload.nama_sales);
+    params.append('titik_lokasi_gps', payload.titik_lokasi_gps);
+    params.append('lokasi_maps', payload.lokasi_maps);
+
+    await fetch(SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      body: params
+    });
+    // no-cors means we can't read response, assume success
+    const store = { id: Date.now(), kode, name, sales, lat: selected.lat, lng: selected.lng, timestamp };
+    stores.push(store);
+    addMarker(store);
+    if (tempMarker) { map.removeLayer(tempMarker); tempMarker = null; }
+    selected = null;
+    document.getElementById('coord-val').textContent = 'Klik pada peta untuk memilih titik';
+    document.getElementById('coord-val').classList.add('hint-text');
+    document.getElementById('copy-btn').style.display = 'none';
+    document.getElementById('inp-kode').value = '';
+    document.getElementById('inp-name').value = '';
+    document.getElementById('inp-sales').value = '';
+    renderList();
+    showToast('✅ Lokasi berhasil disimpan ke Sheets!');
+  } catch (err) {
+    showToast('❌ Gagal menyimpan. Cek koneksi internet.');
+  }
+
+  isSaving = false;
+  document.getElementById('save-label').textContent = 'Simpan Lokasi';
+  btn.disabled = false;
+}
+
+function addMarker(store) {
+  store.marker = L.marker([store.lat, store.lng], { icon: pinIcon('#222') })
+    .addTo(map)
+    .bindPopup(`<b>${store.name}</b>${store.kode ? '<br>Kode: ' + store.kode : ''}${store.sales ? '<br>Sales: ' + store.sales : ''}<br><small>${store.lat}, ${store.lng}</small>`);
+  store.marker.on('click', () => focusStore(store.id));
+}
+
+function focusStore(id) {
+  const s = stores.find(x => x.id === id);
+  if (!s) return;
+  activeId = id;
+  map.setView([s.lat, s.lng], 16);
+  s.marker.openPopup();
+  renderList();
+}
+
+function deleteStore(id) {
+  const idx = stores.findIndex(x => x.id === id);
+  if (idx === -1) return;
+  map.removeLayer(stores[idx].marker);
+  stores.splice(idx, 1);
+  if (activeId === id) activeId = null;
+  renderList();
+  showToast('🗑️ Lokasi dihapus dari tampilan');
+}
+
+function copyCoord() {
+  if (!selected) return;
+  navigator.clipboard.writeText(`${selected.lat}, ${selected.lng}`);
+  showToast('📋 Koordinat disalin!');
+}
+
+function copyCardCoord(lat, lng) {
+  navigator.clipboard.writeText(`${lat}, ${lng}`);
+  showToast('📋 Koordinat disalin!');
+}
+
+function renderList() {
+  document.getElementById('count').textContent = stores.length;
+  const el = document.getElementById('store-list');
+  if (!stores.length) { el.innerHTML = '<p class="empty">Belum ada lokasi tersimpan.</p>'; return; }
+  el.innerHTML = [...stores].reverse().map(s => `
+    <div class="store-card${s.id === activeId ? ' active' : ''}" onclick="focusStore(${s.id})">
+      <div class="card-top">
+        <div>
+          <div class="card-name">${esc(s.name)}</div>
+          <div class="card-sub">${s.kode ? '🏷️ ' + esc(s.kode) : ''}${s.kode && s.sales ? ' · ' : ''}${s.sales ? '👤 ' + esc(s.sales) : ''}</div>
+        </div>
+        <div class="card-actions">
+          <button onclick="event.stopPropagation();copyCardCoord('${s.lat}','${s.lng}')" title="Salin koordinat">📋</button>
+          <button class="del" onclick="event.stopPropagation();deleteStore(${s.id})" title="Hapus">🗑️</button>
+        </div>
+      </div>
+      <div class="card-coord">📍 ${s.lat}, ${s.lng}</div>
+      <div class="card-sub" style="margin-top:4px;font-size:0.72rem;color:#bbb;">${s.timestamp}</div>
+    </div>
+  `).join('');
+}
+
+function esc(str) { return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+</script>
+</body>
+</html>
